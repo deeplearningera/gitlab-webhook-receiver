@@ -1,7 +1,7 @@
 const axios = require("axios");
 
 const gitlabApi = axios.create({
-  baseURL: "https://gitlab.payu.in/api/v4",
+  baseURL: "https://gitlab.in/api/v4",
   headers: {
     "PRIVATE-TOKEN": process.env.GITLAB_TOKEN,
   },
