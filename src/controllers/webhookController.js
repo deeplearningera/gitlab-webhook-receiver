@@ -35,6 +35,9 @@ exports.handleWebhook = async (req, res) => {
         repo: event.project.path_with_namespace,
       };
 
+      console.log("📨 Message to queue:");
+      console.log(JSON.stringify(message, null, 2));
+
       await queueService.sendToQueue(message);
     }
 
