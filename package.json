@@ -2,7 +2,6 @@
   "name": "gitlab-webhook",
   "version": "1.0.0",
   "description": "Webhook receiver for GitLab merge events -> sends data to AI Analyzer",
-  "type": "module",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
