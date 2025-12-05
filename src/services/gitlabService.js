@@ -9,9 +9,11 @@ const gitlabApi = axios.create({
 
 exports.fetchMRChanges = async (projectId, mrIid) => {
   try {
+    console.log("Fetching gitlab diff");
     const response = await gitlabApi.get(
       `/projects/${projectId}/merge_requests/${mrIid}/changes`
     );
+    console.log("Fetched gitlab diff");
     return response.data.changes;
   } catch (err) {
     console.error("❌ GitLab API error:", err.response?.data || err);
