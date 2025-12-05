@@ -14,7 +14,7 @@ exports.handleWebhook = async (req, res) => {
     if (
       event.object_kind === "merge_request" &&
       event.object_attributes.state === "merged" &&
-      event.object_attributes.target_branch === "master"
+      event.object_attributes.target_branch === "main"
     ) {
       console.log("🔔 MR merged! Fetching diff...");
 
