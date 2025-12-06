@@ -1,50 +1,78 @@
 const gitlabService = require("../services/gitlabService");
-const queueService = require("../services/queueService");
+const axios = require("axios");
+const logger = require("../utils/logger");
+
+const AI_ANALYZER_URL = process.env.AI_ANALYZER_URL;
 
 exports.handleWebhook = async (req, res) => {
   try {
-    const gitlabToken = req.headers["x-gitlab-token"];
-    if (gitlabToken !== process.env.WEBHOOK_SECRET) {
-      return res.status(403).json({ error: "Invalid Webhook Token" });
+    const eventType = req.headers["x-gitlab-event"];
+
+    if (eventType !== "Merge Request Hook") {
+      return res.status(200).send("Ignored: Not MR event");
     }
 
-    const event = req.body;
+    const payload = req.body;
+    const mr = payload.object_attributes;
 
-    // We only care about merged merge requests into master
-    if (
-      event.object_kind === "merge_request" &&
-      event.object_attributes.state === "merged" &&
-      event.object_attributes.target_branch === "main"
-    ) {
-      console.log("🔔 MR merged! Fetching diff...");
-
-      const projectId = event.project.id;
-      const mrIid = event.object_attributes.iid;
-
-      // Fetch full diff
-      const changes = await gitlabService.fetchMRChanges(projectId, mrIid);
-
-      const message = {
-        mr_id: mrIid,
-        project_id: projectId,
-        title: event.object_attributes.title,
-        description: event.object_attributes.description,
-        merged_by: event.user.name,
-        merged_at: event.object_attributes.updated_at,
-        diff: changes,
-        repo: event.project.path_with_namespace,
-      };
-
-      console.log("📨 Message to queue:");
-      console.log(JSON.stringify(message, null, 2));
-
-      await queueService.sendToQueue(message);
+    if (!mr || !mr.iid) {
+      return res.status(400).send("Invalid MR payload");
     }
 
-    return res.status(200).json({ status: "ok" });
+    // Process only merged OR updated MRs
+    if (!["merge", "update"].includes(mr.action)) {
+      return res.status(200).send(`Ignored MR action: ${mr.action}`);
+    }
+
+    const project = payload.project;
+    const projectId = project.id;
+    const projectWebUrl = project.web_url;
+
+    logger.info(`Processing MR !${mr.iid} for project ${project.path_with_namespace}`);
+
+    // 1️⃣ Fetch MR changes
+    const mrChanges = await gitlabService.fetchMRChanges(
+      projectWebUrl,
+      projectId,
+      mr.iid
+    );
+
+    // 2️⃣ Build payload for AI Analyzer
+    const analyzerPayload = {
+      mr_id: mr.id,
+      mr_iid: mr.iid,
+      title: mr.title,
+      description: mr.description,
+      state: mr.state,
+      action: mr.action,
+      source_branch: mr.source_branch,
+      target_branch: mr.target_branch,
+      last_commit_sha: mr.last_commit?.id,
+      project: {
+        id: projectId,
+        name: project.name,
+        path: project.path_with_namespace,
+        web_url: projectWebUrl,
+      },
+      author: {
+        name: mr.last_commit?.author?.name || payload.user?.name,
+        email: mr.last_commit?.author?.email,
+      },
+      changes: mrChanges.changes || [],
+      web_url: mr.url,
+    };
+
+    // 3️⃣ Fire-and-forget call to AI Analyzer
+    axios.post(`${AI_ANALYZER_URL}/analyze/mr`, analyzerPayload, {
+      timeout: 10000,
+    }).catch(err => {
+      logger.error(`AI Analyzer call failed: ${err.message}`);
+    });
+
+    return res.status(200).send("MR event accepted");
   } catch (err) {
-    console.error("❌ Error in webhook:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    logger.error(`Webhook processing failed: ${err.message}`);
+    return res.status(500).send("Internal error");
   }
 };
 
