@@ -62,6 +62,8 @@ exports.handleWebhook = async (req, res) => {
       web_url: mr.url,
     };
 
+    console.log("📦 Payload to AI Analyzer:", JSON.stringify(message, null, 2));
+
     // 3️⃣ Fire-and-forget call to AI Analyzer
     axios.post(`${AI_ANALYZER_URL}/analyze/mr`, analyzerPayload, {
       timeout: 10000,
